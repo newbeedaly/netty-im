@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>One-to-One Chat</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #chat { height: 300px; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; }
+        #input { margin-top: 10px; }
+        .message-self { text-align: right; color: blue; }
+        .message-other { text-align: left; color: green; }
+    </style>
+</head>
+<body>
+<h1>One-to-One Chat</h1>
+<label>Your User ID: <input id="userId" type="text" placeholder="Enter your user ID"></label>
+<button onclick="connect()">Connect</button>
+<button onclick="disconnect()">Disconnect</button><br>
+<label>Target User ID: <input id="targetUserId" type="text" placeholder="Enter target user ID"></label><br>
+<div id="chat"></div>
+<div id="input">
+    <input id="message" type="text" placeholder="Type your message" onkeyup="if(event.keyCode === 13) sendMessage()">
+    <button onclick="sendMessage()">Send</button>
+</div>
+
+<script>
+    let ws = null;
+    let myUserId = '';
+
+    function connect() {
+        myUserId = document.getElementById('userId').value;
+        if (!myUserId) {
+            alert('Please enter your user ID');
+            return;
+        }
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            alert('Already connected.');
+            return;
+        }
+
+        ws = new WebSocket('ws://localhost:8081/ws');
+
+        ws.onopen = () => {
+            console.log('Connected to server');
+            document.getElementById('chat').innerHTML += '<p><strong>Connected!</strong></p>';
+            const userId = document.getElementById('userId').value;
+            // Send a registration message to the server if needed (e.g., to associate userId with websocket)
+            // ws.send(`REGISTER:${myUserId}`); // Example for a server that handles registration
+            const msg = {
+                msgType: '0',
+                userId: userId,
+                targetUserId: null,
+                message: null
+            };
+            ws.send(JSON.stringify(msg));
+        };
+
+        ws.onmessage = (event) => {
+            const chatDiv = document.getElementById('chat');
+            const data = event.data;
+            // Assuming the server sends messages in the format "senderId:messageContent"
+            // Or "targetId:senderId:messageContent" if the server echoes back
+            const parts = data.split(':');
+            let sender = '';
+            let messageContent = '';
+
+            if (parts.length >= 2) {
+                // Heuristic to determine if it's a direct message or server info
+                if (parts[0] === myUserId && parts.length >=3) { // This might be an echo back to self
+                    sender = parts[1];
+                    messageContent = parts.slice(2).join(':');
+                    chatDiv.innerHTML += `<p class="message-self"><strong>You (${myUserId}) to ${parts[0]}</strong>: ${messageContent}</p>`; // This line should be refined based on actual server echo
+                } else if (parts.length >= 2) {
+                    sender = parts[0];
+                    messageContent = parts.slice(1).join(':');
+                    if (sender === myUserId) {
+                        chatDiv.innerHTML += `<p class="message-self"><strong>You</strong>: ${messageContent}</p>`;
+                    } else {
+                        chatDiv.innerHTML += `<p class="message-other"><strong>${sender}</strong>: ${messageContent}</p>`;
+                    }
+                } else {
+                    chatDiv.innerHTML += `<p>${data}</p>`; // Fallback for unparsed messages
+                }
+            } else {
+                chatDiv.innerHTML += `<p>${data}</p>`; // For simple server messages like "Connected!"
+            }
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        };
+
+        ws.onclose = () => {
+            document.getElementById('chat').innerHTML += '<p><strong>Disconnected from server</strong></p>';
+            ws = null;
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket Error:', error);
+            document.getElementById('chat').innerHTML += `<p style="color: red;">WebSocket Error: ${error.message}</p>`;
+        };
+    }
+
+    function disconnect() {
+        if (ws) {
+            ws.close();
+        } else {
+            alert('Not connected to server.');
+        }
+    }
+
+    function sendMessage() {
+        const userId = document.getElementById('userId').value;
+        const targetUserId = document.getElementById('targetUserId').value;
+        const message = document.getElementById('message').value;
+        const msgType = '1';
+
+        if (!userId || !targetUserId || !message) {
+            alert('Please fill in all fields (Your User ID, Target User ID, Message).');
+            return;
+        }
+
+        const msg = {
+            msgType: msgType,
+            userId: userId,
+            targetUserId: targetUserId,
+            message: message
+        };
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            // The format "senderId:msgType:targetId:message" is used for sending
+            ws.send(JSON.stringify(msg));
+            // Display your own sent message immediately in the chat
+            const chatDiv = document.getElementById('chat');
+            chatDiv.innerHTML += `<p class="message-self"><strong>You to ${targetUserId}</strong>: ${message}</p>`;
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+            document.getElementById('message').value = '';
+        } else {
+            alert('Not connected to server. Please click "Connect" first.');
+        }
+    }
+</script>
+</body>
+</html>
