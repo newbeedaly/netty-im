@@ -53,5 +53,40 @@ public void listenNodeMessage(Message msg) {
     }
 }
 ```
+
+配置
+
+```java
+使用Spring的Environment和@Value注解
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Component;
+
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+
+@Component
+public class KafkaConsumer {
+
+    @Value("${server.ip:}")
+    private String serverIp;
+
+    @KafkaListener(topics = "node_${server.ip}")
+    public void listen(String message) {
+        // 处理消息
+    }
+
+    // 在应用启动时设置IP
+    @PostConstruct
+    public void init() throws UnknownHostException {
+        if (serverIp.isEmpty()) {
+            // 获取内网IP
+            String localIp = InetAddress.getLocalHost().getHostAddress();
+            System.setProperty("server.ip", localIp);
+            // 注意：此时KafkaListener可能已经初始化，需要重启监听器
+        }
+    }
+}
+```
 4. 消息顺序保证：聊天时间
 5. 消息持久化
